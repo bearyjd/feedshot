@@ -6,8 +6,11 @@ mode; the Documents side is in ``docside``.
 """
 
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Protocol
 
+from fastfoto_linux.documents import DocumentSettings
+from fastfoto_linux.documents.draft import DocumentDraft
 from fastfoto_linux.gui.docform import DocumentForm
 from fastfoto_linux.gui.documents import DocumentItem
 from fastfoto_linux.gui.form import ScanForm, destination
@@ -20,6 +23,7 @@ from fastfoto_linux.gui.report import (
     progress_text,
     result_banner,
 )
+from fastfoto_linux.gui.reviewjobs import PreviewRequest
 from fastfoto_linux.gui.state import Mode, State
 from fastfoto_linux.session import DocumentSessionResult, SessionResult
 
@@ -63,6 +67,15 @@ class WorkerPort(Protocol):
     def process_kept(self, kept: SessionResult | DocumentSessionResult) -> None: ...
     def cancel(self) -> None: ...
     def photo_edit_job(self, request: PhotoEditRequest) -> None: ...
+    def analyse_folder(self, folder: Path, settings: DocumentSettings) -> None: ...
+    def write_draft(self, draft: DocumentDraft, settings: DocumentSettings) -> None: ...
+    def preview_page(
+        self, draft: DocumentDraft | PreviewRequest, number: int | None = None
+    ) -> None: ...
+    def estimate_page(self, draft: DocumentDraft, number: int) -> None: ...
+
+    @property
+    def busy(self) -> bool: ...
 
 
 class ModeSide[R](Protocol):
