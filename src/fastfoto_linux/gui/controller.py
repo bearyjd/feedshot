@@ -118,6 +118,29 @@ class Controller:
         self.on_review_deskew = self.review.deskew.ready
         self._set_form(form or ScanForm(), disk=disk_check is None)
 
+    # -- what the review side drives -----------------------------------------------------
+
+    @property
+    def worker(self) -> WorkerPort:
+        return self._worker
+
+    @property
+    def docs(self) -> DocumentsSide:
+        return self._docs
+
+    def set_banner(self, banner: Banner | None) -> None:
+        """Replace the banner; the caller notifies once its other changes are in."""
+        self._banner = banner
+
+    def set_result(self, result: SessionResult | DocumentSessionResult | None) -> None:
+        self._result = result
+
+    def move_to(self, state: State, banner: Banner | None = None) -> None:
+        """Go to ``state`` (InvalidTransitionError if the page cannot), set the banner, notify."""
+        self._state = transition(self._state, state)
+        self._banner = banner
+        self._changed()
+
     # -- what the page shows -------------------------------------------------------------
 
     @property

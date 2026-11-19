@@ -24,7 +24,7 @@ from fastfoto_linux.gui.reviewjobs import (
     PreviewResult,
 )
 from fastfoto_linux.gui.reviewnames import PREVIEW_DIR, preview_name_allowed
-from fastfoto_linux.gui.state import ActionBlockedError, Mode, State, transition
+from fastfoto_linux.gui.state import ActionBlockedError, Mode, State
 from fastfoto_linux.session import DocumentSessionResult, SessionResult
 
 if TYPE_CHECKING:
@@ -88,10 +88,10 @@ class ReviewSide:
 
     @property
     def _worker_busy(self) -> bool:
-        return bool(getattr(self._controller._worker, "busy", False))
+        return bool(getattr(self._controller.worker, "busy", False))
 
     def enable(self) -> None:
-        self._controller._docs.review_enabled = True
+        self._controller.docs.review_enabled = True
 
     def leaving(self) -> bool:
         return not self.active or self.flush()
@@ -126,7 +126,7 @@ class ReviewSide:
 
     def report_error(self, text: str) -> None:
         """Show ``text`` as the error banner."""
-        self._controller._banner = Banner("error", text)
+        self._controller.set_banner(Banner("error", text))
         self._controller._changed()
 
     def flush(self) -> bool:
@@ -136,7 +136,7 @@ class ReviewSide:
             save_draft(self.state.draft, self._settings)
         except (OSError, ValueError) as error:
             logger.warning("could not save the document review: %s", error)
-            self._controller._banner = Banner("error", "Could not save the review. " + str(error))
+            self._controller.set_banner(Banner("error", "Could not save the review. " + str(error)))
             self._controller._changed()
             return False
         self.dirty = False
@@ -163,7 +163,7 @@ class ReviewSide:
         self._opening_settings = replace(
             self._current_settings(), cleanup=CleanupPolicy.OFF, despeckle=False, deskew=False
         )
-        c._worker.analyse_folder(folder, self._opening_settings)
+        c.worker.analyse_folder(folder, self._opening_settings)
         self._pending = "open"
         self._preview_requested = None
         self.preview_path = None
@@ -180,7 +180,7 @@ class ReviewSide:
             self._saving_originals = capture_originals(self.state.draft)
         except (OSError, ValueError):
             self._saving_originals = None
-        self._controller._worker.write_draft(self.state.draft, self._settings)
+        self._controller.worker.write_draft(self.state.draft, self._settings)
         self._pending = "save"
         self._set(State.PROCESSING)
 
@@ -228,7 +228,7 @@ class ReviewSide:
             return True
         if not result.document.ok:
             self._originals = None
-            self._set(State.REVIEWING, self._controller._docs.result_banner(State.DONE, result))
+            self._set(State.REVIEWING, self._controller.docs.result_banner(State.DONE, result))
             return True
         assert self.state is not None
         self._saved, self._originals = self.state.draft, self._saving_originals
@@ -238,7 +238,7 @@ class ReviewSide:
         if self._pending == "open":
             self._settings = self._opening_settings
         else:
-            self._settings = self._controller._docs.review_settings or self._current_settings()
+            self._settings = self._controller.docs.review_settings or self._current_settings()
         assert self._settings is not None
         self._settings = replace(self._settings, duplex=draft.duplex, keep_blank=draft.keep_blank)
         self._pending = ""
@@ -249,7 +249,7 @@ class ReviewSide:
         self.preview_view = "source"
         self._preview_requested = self._preview_running = self._preview_cached = None
         self._originals = None
-        self._controller._result = DocumentSessionResult(draft=draft, raw_dir=draft.raw_dir)
+        self._controller.set_result(DocumentSessionResult(draft=draft, raw_dir=draft.raw_dir))
         self._set(State.REVIEWING)
 
     def error(self, error: Exception) -> bool:
@@ -321,9 +321,9 @@ class ReviewSide:
         self._preview_running = request
         try:
             if request.view == "source":
-                self._controller._worker.preview_page(request.draft, request.number)
+                self._controller.worker.preview_page(request.draft, request.number)
             else:
-                self._controller._worker.preview_page(request)
+                self._controller.worker.preview_page(request)
         except Exception:
             self._preview_requested = self._preview_running = None
             raise
@@ -364,8 +364,8 @@ class ReviewSide:
         ):
             self._preview_requested = None
             if completion.error:
-                self._controller._banner = Banner(
-                    "error", "Could not preview the page. " + completion.error
+                self._controller.set_banner(
+                    Banner("error", "Could not preview the page. " + completion.error)
                 )
             else:
                 self.preview_path, self.preview_number = completion.path, request.number
@@ -390,11 +390,8 @@ class ReviewSide:
         delete_originals(self._originals)
         self._saved, self._originals = None, None
         self.state = None
-        self._controller._banner = Banner("info", "The original pages were deleted.")
+        self._controller.set_banner(Banner("info", "The original pages were deleted."))
         self._controller._changed()
 
     def _set(self, state: State, banner: Banner | None = None) -> None:
-        c = self._controller
-        c._state = transition(c.state, state)
-        c._banner = banner
-        c._changed()
+        self._controller.move_to(state, banner)
