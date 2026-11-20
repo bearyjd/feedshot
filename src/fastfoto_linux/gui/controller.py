@@ -111,7 +111,7 @@ class Controller:
             busy=lambda: (
                 self.busy or self.photo_edit.active or bool(getattr(self._worker, "busy", False))
             ),
-            changed=self._changed,
+            changed=self.notify,
         )
         self.on_power = self.power.complete
         self.on_review_preview = self.review.preview_ready
@@ -139,7 +139,7 @@ class Controller:
         """Go to ``state`` (InvalidTransitionError if the page cannot), set the banner, notify."""
         self._state = transition(self._state, state)
         self._banner = banner
-        self._changed()
+        self.notify()
 
     # -- what the page shows -------------------------------------------------------------
 
@@ -345,14 +345,14 @@ class Controller:
             self._state = State.READY if self._scanner_ready else State.NO_SCANNER
         self._docs.look_for_ocr()
         self._remember(self._save_mode, wanted)
-        self._changed()
+        self.notify()
 
     def set_document_field(self, name: str, value: object) -> None:
         """Change one field of the Documents form (the folder is the Photos form's)."""
         self._docs.set_field(name, value)
         if name == "langs":
             self._remember(self._docs.save_form, self._docs.form)
-        self._changed()
+        self.notify()
 
     def set_field(self, name: str, value: object) -> None:
         """Change one field. Only its text is checked: the disk is read by ``check_disk``."""
@@ -361,7 +361,7 @@ class Controller:
         self._disk_errors = keep
         if name in _DISK_FIELDS:
             self._forget_disk_check()  # what it will say is about the text before this edit
-        self._changed()
+        self.notify()
 
     def check_disk(self) -> None:
         """Look at the disk for the output folder and album, once the user is done editing.
@@ -372,7 +372,7 @@ class Controller:
             self._disk_errors = validate_filesystem(self._form)
         else:
             self._read_disk(self._disk_check, then_scan=self._scan_when_checked)
-        self._changed()
+        self.notify()
 
     def check_scanner(self) -> None:
         if not self.review.leaving():
@@ -386,7 +386,7 @@ class Controller:
             return
         self._docs.look_for_ocr()  # it may have been installed since the app started
         self._state = transition(self._state, State.CHECKING)
-        self._changed()
+        self.notify()
 
     def start_scan(self) -> None:
         if not self.can_scan:
@@ -399,7 +399,7 @@ class Controller:
             self._read_disk(self._disk_check, then_scan=True)
         else:  # the check under way (it began when the user left the field) is the one to wait for
             self._scan_when_checked = True
-        self._changed()  # either way the scan starts at ``on_disk``
+        self.notify()  # either way the scan starts at ``on_disk``
 
     def _launch_scan(self) -> None:
         """The scan, once the disk has been looked at again for it."""
@@ -426,18 +426,18 @@ class Controller:
         self._documents = ()
         self._banner = None
         self._result = None
-        self._changed()
+        self.notify()
 
     def cancel(self) -> None:
         if self.starting_scan:  # no job yet: give up waiting for the folder (it may hang)
             self._forget_disk_check()
-            self._changed()
+            self.notify()
             return
         if not self.can_cancel:
             raise ActionBlockedError(f"nothing to cancel while {self._state.value}")
         self._state = transition(self._state, State.CANCELLING)
         self._worker.cancel()
-        self._changed()
+        self.notify()
 
     def process_kept(self) -> None:
         kept = self._result
@@ -452,7 +452,7 @@ class Controller:
         self._docs.reset_progress()
         self._banner = None
         self._result = self._side_of(kept).kept_after_process(kept)
-        self._changed()
+        self.notify()
 
     def fail(self, error: BaseException, *, job: bool = False) -> None:
         """An unexpected error in the page itself: show it and leave a usable state.
@@ -469,7 +469,7 @@ class Controller:
         self._banner = error_banner(error)
         if job or not self.busy:
             self._state = State.FAILED
-        self._changed()
+        self.notify()
 
     def request_close(self) -> bool:
         """True when the window may close now; otherwise cancels and waits (``close_ready``)."""
@@ -494,7 +494,7 @@ class Controller:
             return
         self._set_scanner(error)
         self._state = transition(self._state, State.READY if error is None else State.NO_SCANNER)
-        self._changed()
+        self.notify()
 
     def on_disk(self, key: DiskKey, errors: dict[str, str]) -> None:
         """What the disk said about the folder and album ``key`` stands for."""
@@ -506,47 +506,47 @@ class Controller:
             self._scan_when_checked = False
             self._launch_scan()
         else:
-            self._changed()
+            self.notify()
 
     def on_stage(self, stage: Stage) -> None:
         if stage is Stage.PROCESSING and self._state is State.SCANNING:
             self._checking_scanner = False
             self._docs.reset_progress()
             self._state = transition(self._state, State.PROCESSING)
-            self._changed()
+            self.notify()
         elif stage is Stage.CHECKING and self._state is State.SCANNING:
             self._checking_scanner = True
-            self._changed()
+            self.notify()
         elif stage is Stage.SCANNING and self._checking_scanner:
             self._checking_scanner = False
-            self._changed()
+            self.notify()
 
     def on_build_page(self, progress: tuple[int, int]) -> None:
         """The PDF is on page ``number`` of ``total``."""
         if self._state not in _REPORTING:
             return self._drop("PDF page")
         self._docs.pdf_page, self._docs.pdf_total = progress
-        self._changed()
+        self.notify()
 
     def on_ocr(self, running: bool = True) -> None:
         """The searchable text is being added (the bridge hands every event one value)."""
         if self._state not in _REPORTING:
             return self._drop("OCR start")
         self._docs.ocr_running = running
-        self._changed()
+        self.notify()
 
     def on_page(self, number: int) -> None:
         if self._state not in _REPORTING:
             return self._drop("page")
         self._pages = number
         self._checking_scanner = False
-        self._changed()
+        self.notify()
 
     def on_photo(self, files: WrittenFiles) -> None:
         if self._state not in _REPORTING:
             return self._drop("photo")
         self._photos = (*self._photos, item_from_files(files))
-        self._changed()
+        self.notify()
 
     def on_finished(self, result: SessionResult | DocumentSessionResult) -> None:
         if self._state not in _REPORTING:
@@ -562,7 +562,7 @@ class Controller:
         self._banner = self._side_of(result).result_banner(final, result)
         if scanner_lost(result.error):
             self._set_scanner(result.error, repeated=True)
-        self._changed()
+        self.notify()
 
     def on_error(self, error: Exception) -> None:
         if self._state not in (State.CHECKING, *_REPORTING):
@@ -579,7 +579,7 @@ class Controller:
                 self._set_scanner(error, repeated=True)
             self._banner = self._side.error_banner(error, self._result)
             self._state = transition(self._state, State.FAILED)
-        self._changed()
+        self.notify()
 
     # -- helpers -------------------------------------------------------------------------
 
@@ -602,7 +602,7 @@ class Controller:
     def _refuse(self, why: str, *, what: str = "The scan did not start") -> None:
         """Something that did not start: say why, and keep the page as it was."""
         self._banner = Banner("error", f"{what}: {why.rstrip('.')}.")
-        self._changed()
+        self.notify()
 
     def _drop(self, what: str) -> None:
         logger.debug("ignoring a late %s while %s", what, self._state.value)
@@ -670,6 +670,7 @@ class Controller:
         """The side that made ``result``."""
         return self._docs if isinstance(result, DocumentSessionResult) else self._photos_side
 
-    def _changed(self) -> None:
+    def notify(self) -> None:
+        """Tell the listeners the state changed."""
         if self._on_change is not None:
             self._on_change()

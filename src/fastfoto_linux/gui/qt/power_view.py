@@ -111,7 +111,7 @@ class PowerView(QObject):
             action()
         except ActionBlockedError as error:
             self._settings.message = str(error)
-            self._controller._changed()
+            self._controller.notify()
 
     @Slot()
     def read(self) -> None:

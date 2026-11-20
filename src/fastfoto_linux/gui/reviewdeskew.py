@@ -68,9 +68,9 @@ class ReviewDeskew:
             raise ActionBlockedError("select the page first")
         draft = side.state.draft
         self._message = None
-        side._controller._worker.estimate_page(draft, number)
+        side._controller.worker.estimate_page(draft, number)
         self.pending = (draft, number)
-        side._controller._changed()
+        side._controller.notify()
 
     def clear(self, number: int) -> None:
         """Take the angle off ``number``. The crop that straightening cleared stays cleared."""
@@ -88,7 +88,7 @@ class ReviewDeskew:
             else:
                 logger.debug("dropped the tilt of page %d: the page was left", answer.number)
             side.resume_preview()
-        side._controller._changed()
+        side._controller.notify()
 
     def _apply(self, answer: DeskewAnswer) -> None:
         side = self._side
