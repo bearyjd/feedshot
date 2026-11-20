@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from fastfoto_linux.cli import main
@@ -110,3 +111,47 @@ def test_keep_original_is_the_explicit_spelling_of_the_default(settings_of) -> N
 
 def test_the_output_folder_is_a_path(settings_of) -> None:
     assert isinstance(settings_of().output_root, Path)
+
+
+def _restore_of(settings: ProcessSettings):
+    (enhancer,) = settings.enhancers
+    return enhancer
+
+
+def test_restore_tuning_is_off_by_default(settings_of) -> None:
+    assert settings_of("--restore").enhancers == (restore_colour,)
+
+
+def test_restore_clahe_changes_the_output(settings_of) -> None:
+    rng = np.random.default_rng(1)
+    img = (rng.integers(60, 140, (200, 300, 1)) + np.zeros((1, 1, 3), int)).astype(np.uint8)
+    plain = _restore_of(settings_of())(img, 300)
+    local = _restore_of(settings_of("--restore-clahe"))(img, 300)
+    assert not np.array_equal(plain, local)
+
+
+def test_restore_gains_are_bound(settings_of) -> None:
+    enhancer = _restore_of(
+        settings_of("--restore-max-gain", "1.5", "--restore-saturation-gain", "1")
+    )
+    assert enhancer.keywords["settings"].max_gain == 1.5
+    assert enhancer.keywords["settings"].saturation_gain == 1.0
+    assert enhancer.keywords["settings"].clahe is False
+
+
+def test_restore_tuning_is_ignored_when_restore_is_off(settings_of) -> None:
+    assert settings_of("--no-restore", "--restore-clahe").enhancers == ()
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        ("--restore-max-gain", "0.5"),
+        ("--restore-saturation-gain", "9"),
+        ("--restore-max-gain", "nan"),
+    ],
+)
+def test_bad_restore_values_are_usage_errors(tmp_path, out, flags, capsys) -> None:
+    page = write_dummy_page(tmp_path / "raw", "page-1.png")
+    assert main(["process", str(page), "--out", str(out), *flags]) == 2
+    assert "gain" in capsys.readouterr().err
