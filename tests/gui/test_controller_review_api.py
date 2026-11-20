@@ -1,5 +1,9 @@
 """The public Controller methods the review side uses instead of writing its internals."""
 
+import re
+from pathlib import Path
+
+from fastfoto_linux import gui
 from fastfoto_linux.gui.controller import Controller
 from fastfoto_linux.gui.form import ScanForm
 from fastfoto_linux.gui.report import Banner
@@ -41,3 +45,22 @@ def test_move_to_changes_state_and_banner_then_notifies() -> None:
     assert controller.state is State.CHECKING
     assert controller.banner is None
     assert calls == [1]
+
+
+def test_notify_fires_the_listeners() -> None:
+    controller, _, calls = make()
+    controller.notify()
+    assert calls == [1]
+
+
+def test_components_do_not_reach_into_controller_internals() -> None:
+    root = Path(gui.__file__).parent
+    pattern = re.compile(r"\b(?:_controller|controller|c)\._\w")
+    offenders = [
+        f"{path.relative_to(root)}:{n}: {line.strip()}"
+        for path in root.rglob("*.py")
+        if path.name != "controller.py"
+        for n, line in enumerate(path.read_text().splitlines(), 1)
+        if pattern.search(line)
+    ]
+    assert offenders == []

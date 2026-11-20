@@ -88,7 +88,7 @@ class PhotoEditSide(PhotoGeometryActions, PhotoAspectActions, PhotoColorActions)
 
     @property
     def _worker_busy(self) -> bool:
-        return bool(getattr(self._controller._worker, "busy", False))
+        return bool(getattr(self._controller.worker, "busy", False))
 
     @property
     def dirty(self) -> bool:
@@ -156,7 +156,7 @@ class PhotoEditSide(PhotoGeometryActions, PhotoAspectActions, PhotoColorActions)
         self._changed()
 
     def _submit(self, request: PhotoEditRequest) -> None:
-        self._controller._worker.photo_edit_job(request)
+        self._controller.worker.photo_edit_job(request)
         self._inflight = request
 
     def complete(self, result: PhotoEditResult) -> None:
@@ -349,7 +349,7 @@ class PhotoEditSide(PhotoGeometryActions, PhotoAspectActions, PhotoColorActions)
         if self.dirty and not discard_confirmed:
             return False
         if self._inflight is not None:
-            self._controller._worker.cancel()
+            self._controller.worker.cancel()
         self.generation += 1
         self.active = False
         self._inflight = self._pending = None
@@ -383,4 +383,4 @@ class PhotoEditSide(PhotoGeometryActions, PhotoAspectActions, PhotoColorActions)
         self._changed()
 
     def _changed(self) -> None:
-        self._controller._changed()
+        self._controller.notify()

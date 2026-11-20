@@ -249,8 +249,8 @@ class ReviewView(QObject):
         return suffix + (" — actual pixels" if self._side.preview_crop is not None else "")
 
     def _show_error(self, text: str) -> None:
-        self._controller._banner = Banner("error", text)
-        self._controller._changed()
+        self._controller.set_banner(Banner("error", text))
+        self._controller.notify()
 
     def _call(self, action: Callable[..., Any], *args: object) -> Any:
         try:

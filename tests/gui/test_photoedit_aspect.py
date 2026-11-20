@@ -308,7 +308,7 @@ def test_an_uncropped_shape_and_a_turn_save_a_version_three_recipe_with_no_crop(
 def test_the_page_is_told_only_after_the_lock_is_set(out):
     side = editor(out)
     seen = []
-    side._controller._changed = lambda: seen.append(side.crop_aspect)
+    side._controller.notify = lambda: seen.append(side.crop_aspect)
     side.set_crop_aspect("original")  # an identity: the page is told once, directly
     side.set_crop_aspect("4:3")  # a change: told by the preview request
     assert seen == ["original", "4:3"]

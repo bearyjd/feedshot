@@ -121,13 +121,13 @@ class ReviewSide:
                 # Re-point at the new draft so a stale in-flight result cannot be re-dispatched
                 # forever; the next dispatch renders the current draft and then matches.
                 self._preview_requested = replace(request, draft=self.state.draft)
-        self._controller._changed()
+        self._controller.notify()
         return True
 
     def report_error(self, text: str) -> None:
         """Show ``text`` as the error banner."""
         self._controller.set_banner(Banner("error", text))
-        self._controller._changed()
+        self._controller.notify()
 
     def flush(self) -> bool:
         if not self.dirty or self.state is None:
@@ -137,7 +137,7 @@ class ReviewSide:
         except (OSError, ValueError) as error:
             logger.warning("could not save the document review: %s", error)
             self._controller.set_banner(Banner("error", "Could not save the review. " + str(error)))
-            self._controller._changed()
+            self._controller.notify()
             return False
         self.dirty = False
         return True
@@ -314,7 +314,7 @@ class ReviewSide:
         self._preview_cached = None
         if not self._worker_busy:
             self._dispatch_preview(request)
-        self._controller._changed()
+        self._controller.notify()
         return ""
 
     def _dispatch_preview(self, request: PreviewRequest) -> None:
@@ -373,7 +373,7 @@ class ReviewSide:
                 self.preview_despeckle_status = completion.despeckle_status
                 self.preview_size, self.preview_dpi = completion.size, completion.dpi
                 self._preview_cached = request
-            self._controller._changed()
+            self._controller.notify()
         self.resume_preview()
 
     def resume_preview(self) -> None:
@@ -391,7 +391,7 @@ class ReviewSide:
         self._saved, self._originals = None, None
         self.state = None
         self._controller.set_banner(Banner("info", "The original pages were deleted."))
-        self._controller._changed()
+        self._controller.notify()
 
     def _set(self, state: State, banner: Banner | None = None) -> None:
         self._controller.move_to(state, banner)
