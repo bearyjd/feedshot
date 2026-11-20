@@ -30,8 +30,8 @@ calibrated on real scans, and no entry here is an image-quality or OCR-quality c
 - Export presets (lossless, high-quality, small) for photos and documents, backend and CLI (#87);
   a "File size" choice in the scan and document forms (#88).
 - The photo editor opens lossless PNG masters (#95).
-
 - CLI flags `--restore-clahe`, `--restore-max-gain` and `--restore-saturation-gain` tune the colour restore step.
+
 **Documents**
 - Per-page Auto colour output and review overrides (#42).
 - Optional paper whitening (cleanup), backend (#56); a paper cleanup choice, preview toggle and
