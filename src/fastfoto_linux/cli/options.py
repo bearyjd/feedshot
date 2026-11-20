@@ -1,12 +1,13 @@
 """Command-line options shared by ``scan`` and ``process``, and their turn into settings."""
 
 import argparse
+import functools
 from pathlib import Path
 
 from fastfoto_linux.cli.errors import EXIT_USAGE, CliError
 from fastfoto_linux.enhance.orient import auto_orient
 from fastfoto_linux.enhance.redeye import remove_red_eye
-from fastfoto_linux.enhance.restore import restore_colour
+from fastfoto_linux.enhance.restore import RestoreSettings, restore_colour
 from fastfoto_linux.output import PhotoDate
 from fastfoto_linux.output.errors import InvalidDateError
 from fastfoto_linux.output.presets import (
@@ -145,6 +146,23 @@ def _add_enhancement_options(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--orient", action=toggle, default=True, help="turn fronts upright by faces")
     group.add_argument("--restore", action=toggle, default=True, help="restore faded colour (_a)")
     group.add_argument(
+        "--restore-clahe",
+        action="store_true",
+        help="add mild local contrast to the restore step (off by default)",
+    )
+    group.add_argument(
+        "--restore-max-gain",
+        type=float,
+        metavar="GAIN",
+        help="cap on the restore step's contrast gain, 1 or more (default: 2)",
+    )
+    group.add_argument(
+        "--restore-saturation-gain",
+        type=float,
+        metavar="GAIN",
+        help="chroma boost for faded photos in the restore step, 1 disables (default: 1.15)",
+    )
+    group.add_argument(
         "--redeye",
         action=toggle,
         default=False,
@@ -195,12 +213,31 @@ def prepare_output_root(args: argparse.Namespace) -> Path:
     return out
 
 
+def _restorer(args: argparse.Namespace) -> Enhancer:
+    """``restore_colour``, bound to any tuning flags given; a bad value is a usage error."""
+    tuning = {
+        name: value
+        for name, value in (
+            ("max_gain", args.restore_max_gain),
+            ("saturation_gain", args.restore_saturation_gain),
+            ("clahe", args.restore_clahe or None),
+        )
+        if value is not None
+    }
+    if not tuning:
+        return restore_colour
+    try:
+        return functools.partial(restore_colour, settings=RestoreSettings(**tuning))
+    except ValueError as error:
+        raise CliError(str(error), EXIT_USAGE) from error
+
+
 def build_settings(args: argparse.Namespace) -> ProcessSettings:
     """The processing settings the options describe; a bad value is a usage error.
 
     Build them before touching the disk or the scanner, so a typo costs nothing.
     """
-    enabled = ((args.restore, restore_colour), (args.redeye, remove_red_eye))
+    enabled = ((args.restore, _restorer(args)), (args.redeye, remove_red_eye))
     enhancers: tuple[Enhancer, ...] = tuple(func for on, func in enabled if on)
     if args.preset is not None and args.quality is not None:
         raise CliError("--preset sets the quality; use --preset or --quality, not both", EXIT_USAGE)
